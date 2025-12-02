@@ -1,0 +1,13 @@
+# --- Core Framework ---
+Django==5.0.2
+
+# --- Communication (RPC) ---
+rpyc==5.3.1
+
+# --- Recommendation Service (Raisa) ---
+numpy==1.26.4
+pandas==2.2.1
+scikit-learn==1.4.2
+
+# --- Utilities ---
+requests==2.31.0
