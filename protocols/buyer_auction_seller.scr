@@ -1,8 +1,21 @@
-// Scribble protocol for Buyer–Auction–Seller.
-// Maya will fill this with the real MST definition.
-
-module safebid;
+module buyer_auction_seller;
 
 global protocol BuyerAuctionSeller(role Buyer, role Auction, role Seller) {
-    // TODO: define message sequences
+
+    // Buyer places a bid to the Auction
+    Bid() from Buyer to Auction;
+
+    // Auction forwards bid information to Seller
+    BidInfo() from Auction to Seller;
+
+    // Seller decides what happens with the bid
+    choice at Seller {
+        // Branch 1: bid accepted
+        Confirm()   from Seller  to Auction;
+        AcceptBid() from Auction to Buyer;
+    } or {
+        // Branch 2: bid rejected
+        Reject()    from Seller  to Auction;
+        RejectBid() from Auction to Buyer;
+    }
 }

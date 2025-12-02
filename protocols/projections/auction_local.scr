@@ -1,0 +1,17 @@
+module buyer_auction_seller_BuyerAuctionSeller_Auction;
+
+local protocol buyer_auction_seller_BuyerAuctionSeller_Auction.BuyerAuctionSeller_Auction
+    (role Buyer, self Auction, role Seller)
+    projects buyer_auction_seller.BuyerAuctionSeller
+{
+    Bid() from Buyer;
+    BidInfo() to Seller;
+
+    choice at Seller {
+        Confirm() from Seller;
+        AcceptBid() to Buyer;
+    } or {
+        Reject() from Seller;
+        RejectBid() to Buyer;
+    }
+}

@@ -1,0 +1,25 @@
+module auction_recommender_AuctionRecommender_Auction;
+
+local protocol auction_recommender_AuctionRecommender_Auction.AuctionRecommender_Auction
+    (self Auction, role Recommender)
+    projects auction_recommender.AuctionRecommender
+{
+    choice at self {
+
+        GetRecs() to Recommender;
+        choice at Recommender {
+            RecList() from Recommender;
+        } or {
+            RecError() from Recommender;
+        }
+
+    } or {
+
+        GetSimilar() to Recommender;
+        choice at Recommender {
+            SimilarList() from Recommender;
+        } or {
+            RecError() from Recommender;
+        }
+    }
+}
