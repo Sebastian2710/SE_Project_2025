@@ -1,0 +1,8 @@
+// Scribble protocol for Auction–Recommendation Service.
+
+module safebid;
+
+global protocol AuctionRecommender(role Auction, role Recommender) {
+    // TODO: define interactions like:
+    // GetRecommendations, RecommendationsList, RecError, etc.
+}

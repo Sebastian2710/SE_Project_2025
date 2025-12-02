@@ -1,0 +1,8 @@
+// Scribble protocol for Buyer–Auction–Seller.
+// Maya will fill this with the real MST definition.
+
+module safebid;
+
+global protocol BuyerAuctionSeller(role Buyer, role Auction, role Seller) {
+    // TODO: define message sequences
+}
