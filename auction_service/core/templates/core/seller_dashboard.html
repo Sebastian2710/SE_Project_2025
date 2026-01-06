@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SafeBid - Seller dashboard</title>
+  </head>
+  <body>
+    <p><a href="/hello/">← Home</a></p>
+
+    <h1>Seller dashboard</h1>
+
+    <div style="margin-bottom: 12px;">
+      <label>
+        Seller:
+        <select id="sellerSelect">
+          <option value="">-- select seller --</option>
+          {% for s in sellers %}
+            <option value="{{ s.id }}" {% if selected_seller and selected_seller.id == s.id %}selected{% endif %}>
+              {{ s.username }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <button id="loadBtn" type="button">Load</button>
+      <a href="/seller/sell/" style="margin-left: 12px;">Sell item</a>
+    </div>
+
+    {% if created_item_id %}
+      <p style="color: green;">
+        Created auction id: <strong>{{ created_item_id }}</strong>
+      </p>
+    {% endif %}
+
+    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ccc;">
+      <strong>Polling:</strong> every 2 seconds
+      <span id="pollStatus" style="margin-left: 10px; color: #555;"></span>
+      <br />
+      <label>
+        Session id (MPST demo):
+        <input id="sessionId" type="text" value="demo1" />
+      </label>
+      <span style="color:#666; font-size:0.9em;">(Use same session_id across tabs to demonstrate protocol rules)</span>
+    </div>
+
+    <h2>Your auctions</h2>
+    <div id="auctionsContainer">Select a seller and click Load.</div>
+
+    <script>
+      const sellerSelect = document.getElementById("sellerSelect");
+      const loadBtn = document.getElementById("loadBtn");
+      const auctionsContainer = document.getElementById("auctionsContainer");
+      const pollStatus = document.getElementById("pollStatus");
+      const sessionIdInput = document.getElementById("sessionId");
+
+      let pollTimer = null;
+
+      function fmtTime(seconds) {
+        const s = Math.max(0, Number(seconds || 0));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${m}m ${r}s`;
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      async function postDecision(bidId, decision) {
+        const sessionId = sessionIdInput.value || "demo1";
+
+        const res = await fetch(`/bid/${bidId}/decision/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, decision: decision }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`Error: ${data.error || "Request failed"}\n${data.details || ""}`);
+          return;
+        }
+        // After decision, polling will update UI automatically
+      }
+
+      function renderAuctions(payload) {
+        const auctions = payload.auctions || [];
+
+        if (auctions.length === 0) {
+          auctionsContainer.innerHTML = "<p>No auctions for this seller yet.</p>";
+          return;
+        }
+
+        let html = "";
+        for (const a of auctions) {
+          html += `
+            <div style="border:1px solid #ccc; padding:12px; margin:10px 0;">
+              <div>
+                <strong>#${a.id} - ${escapeHtml(a.name)}</strong>
+              </div>
+              <div>Status: <strong>${a.status}</strong></div>
+              <div>Current price: <strong>${a.current_price}</strong></div>
+              <div>Highest bidder: ${a.highest_bidder ? "<strong>" + escapeHtml(a.highest_bidder) + "</strong>" : "-"}</div>
+              <div>
+                ${a.status === "COMING_SOON" ? "Starts in" : (a.status === "LIVE" ? "Ends in" : "Ended")}
+                : <strong>${fmtTime(a.time_remaining_seconds)}</strong>
+              </div>
+
+              <div style="margin-top:10px;">
+                <strong>Pending bids:</strong>
+                ${renderPending(a)}
+              </div>
+            </div>
+          `;
+        }
+
+        auctionsContainer.innerHTML = html;
+        wireButtons(); // attach handlers to new buttons
+      }
+
+      function renderPending(auction) {
+        const bids = auction.pending_bids || [];
+        if (auction.status !== "COMING_SOON") {
+          return `<div style="color:#666;">(Seller decisions only apply to COMING_SOON auctions.)</div>`;
+        }
+        if (bids.length === 0) {
+          return `<div style="color:#666;">No pending bids.</div>`;
+        }
+
+        let rows = `<ul>`;
+        for (const b of bids) {
+          rows += `
+            <li style="margin:6px 0;">
+              Bid #${b.id} — buyer: <strong>${escapeHtml(b.buyer)}</strong>, amount: <strong>${b.amount}</strong>
+              <button type="button" data-bid-id="${b.id}" data-decision="confirm" style="margin-left:8px;">Confirm</button>
+              <button type="button" data-bid-id="${b.id}" data-decision="reject" style="margin-left:4px;">Reject</button>
+            </li>
+          `;
+        }
+        rows += `</ul>`;
+        return rows;
+      }
+
+      function wireButtons() {
+        const buttons = auctionsContainer.querySelectorAll("button[data-bid-id]");
+        buttons.forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const bidId = btn.getAttribute("data-bid-id");
+            const decision = btn.getAttribute("data-decision");
+            await postDecision(bidId, decision);
+          });
+        });
+      }
+
+      async function pollOnce() {
+        const sellerId = sellerSelect.value;
+        if (!sellerId) return;
+
+        try {
+          pollStatus.textContent = "Fetching...";
+          const res = await fetch(`/api/seller/${sellerId}/auctions/`);
+          const data = await res.json();
+          if (!res.ok) {
+            auctionsContainer.innerHTML = `<p style="color:red;">${escapeHtml(data.error || "Failed")}</p>`;
+            pollStatus.textContent = "Error";
+            return;
+          }
+          renderAuctions(data);
+          pollStatus.textContent = "Updated " + new Date().toLocaleTimeString();
+        } catch (e) {
+          pollStatus.textContent = "Network error";
+        }
+      }
+
+      function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollOnce();
+        pollTimer = setInterval(pollOnce, 2000);
+      }
+
+      loadBtn.addEventListener("click", () => {
+        const sellerId = sellerSelect.value;
+        if (!sellerId) {
+          alert("Select a seller first.");
+          return;
+        }
+        // update URL for easy refresh/share
+        window.history.replaceState({}, "", `/seller/dashboard/?seller_id=${sellerId}`);
+        startPolling();
+      });
+
+      // auto-start if seller preselected via query param
+      if (sellerSelect.value) {
+        startPolling();
+      }
+    </script>
+  </body>
+</html>

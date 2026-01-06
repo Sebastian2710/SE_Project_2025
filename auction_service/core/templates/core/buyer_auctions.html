@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SafeBid - Browse auctions</title>
+  </head>
+  <body>
+    <p><a href="/hello/">← Home</a></p>
+
+    <h1>Browse auctions</h1>
+
+    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ccc;">
+      <label>
+        Buyer identity (demo):
+        <select id="buyerSelect">
+          <option value="">-- select buyer --</option>
+          {% for b in buyers %}
+            <option value="{{ b.id }}">{{ b.username }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <span style="margin-left: 14px;"></span>
+
+      <label>
+        Filter:
+        <select id="statusFilter">
+          <option value="">LIVE + COMING_SOON (default)</option>
+          <option value="LIVE">LIVE only</option>
+          <option value="COMING_SOON">COMING_SOON only</option>
+          <option value="ENDED">ENDED only</option>
+          <option value="ALL">ALL (incl. ENDED)</option>
+        </select>
+      </label>
+
+      <span id="pollStatus" style="margin-left: 12px; color:#555;"></span>
+    </div>
+
+    <div id="auctionsContainer">Loading...</div>
+
+    <script>
+      const buyerSelect = document.getElementById("buyerSelect");
+      const statusFilter = document.getElementById("statusFilter");
+      const auctionsContainer = document.getElementById("auctionsContainer");
+      const pollStatus = document.getElementById("pollStatus");
+
+      function fmtTime(seconds) {
+        const s = Math.max(0, Number(seconds || 0));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${m}m ${r}s`;
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function labelTime(status, seconds) {
+        if (status === "COMING_SOON") return `Starts in ${fmtTime(seconds)}`;
+        if (status === "LIVE") return `Ends in ${fmtTime(seconds)}`;
+        return `Ended`;
+      }
+
+      function renderAuctions(auctions) {
+        if (!auctions || auctions.length === 0) {
+          auctionsContainer.innerHTML = "<p>No auctions found.</p>";
+          return;
+        }
+
+        let html = "";
+        for (const a of auctions) {
+          const buyerId = buyerSelect.value || "";
+          const link = buyerId
+            ? `/buyer/auction/${a.id}/?buyer_id=${buyerId}`
+            : `/buyer/auction/${a.id}/`;
+
+          html += `
+            <div style="border:1px solid #ccc; padding:12px; margin:10px 0;">
+              <div><strong>#${a.id} - ${escapeHtml(a.name)}</strong></div>
+              <div>Seller: ${escapeHtml(a.seller)}</div>
+              <div>Status: <strong>${a.status}</strong></div>
+              <div>Current price: <strong>${a.current_price}</strong></div>
+              <div>Highest bidder: ${a.highest_bidder ? "<strong>" + escapeHtml(a.highest_bidder) + "</strong>" : "-"}</div>
+              <div>${labelTime(a.status, a.time_remaining_seconds)}</div>
+              <div style="margin-top: 8px;">
+                <a href="${link}">Open</a>
+              </div>
+            </div>
+          `;
+        }
+        auctionsContainer.innerHTML = html;
+      }
+
+      async function pollOnce() {
+        try {
+          pollStatus.textContent = "Fetching...";
+          const filter = statusFilter.value;
+
+          // Our backend supports ?status=LIVE/COMING_SOON/ENDED.
+          // Default view should show LIVE+COMING_SOON.
+          let url = "/api/auctions/";
+          const res = await fetch(url);
+          const data = await res.json();
+
+          if (!res.ok) {
+            auctionsContainer.innerHTML = `<p style="color:red;">${escapeHtml(data.error || "Failed")}</p>`;
+            pollStatus.textContent = "Error";
+            return;
+          }
+
+          let auctions = data.auctions || [];
+
+          if (filter === "") {
+            auctions = auctions.filter(a => a.status === "LIVE" || a.status === "COMING_SOON");
+          } else if (filter === "ALL") {
+            // no filter
+          } else {
+            auctions = auctions.filter(a => a.status === filter);
+          }
+
+          renderAuctions(auctions);
+          pollStatus.textContent = "Updated " + new Date().toLocaleTimeString();
+        } catch (e) {
+          pollStatus.textContent = "Network error";
+        }
+      }
+
+      pollOnce();
+      setInterval(pollOnce, 2000);
+
+      // re-render link targets when buyer changes
+      buyerSelect.addEventListener("change", pollOnce);
+      statusFilter.addEventListener("change", pollOnce);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SafeBid - Sell item</title>
+  </head>
+  <body>
+    <p><a href="/hello/">← Home</a></p>
+
+    <h1>Sell item</h1>
+
+    {% if error %}
+      <p style="color: red;"><strong>{{ error }}</strong></p>
+    {% endif %}
+
+    <form method="post" action="/seller/sell/">
+      {% csrf_token %}
+
+      <div style="margin-bottom: 12px;">
+        <label>
+          Seller:
+          <select name="seller_id" required>
+            <option value="">-- select seller --</option>
+            {% for s in sellers %}
+              <option value="{{ s.id }}">{{ s.username }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label>
+          Item name:
+          <input type="text" name="name" required />
+        </label>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label>
+          Description:
+          <br />
+          <textarea name="description" rows="4" cols="50"></textarea>
+        </label>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label>
+          Starting price:
+          <input type="number" name="starting_price" step="0.01" min="0" required />
+        </label>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label>
+          Start time:
+          <input type="datetime-local" name="start_time" required />
+        </label>
+        <p style="margin: 6px 0 0 0; font-size: 0.9em;">
+          Tip: set start time a minute in the future to show COMING_SOON → LIVE.
+        </p>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label>
+          Duration (seconds):
+          <input type="number" name="duration_seconds" min="10" value="120" required />
+        </label>
+        <p style="margin: 6px 0 0 0; font-size: 0.9em;">
+          Tip: 120 seconds is nice for a live demo.
+        </p>
+      </div>
+
+      <button type="submit">Create auction</button>
+    </form>
+
+    <hr />
+
+    <p><a href="/seller/dashboard/">Go to Seller dashboard</a></p>
+  </body>
+</html>
