@@ -23,14 +23,22 @@
 
       <span style="margin-left: 14px;"></span>
 
+      <a id="buyerDashboardLink"
+        href="#"
+        style="display:none; font-weight: bold;">
+        📊 Open my dashboard
+      </a>
+
+
+      <span style="margin-left: 14px;"></span>
+
       <label>
         Filter:
         <select id="statusFilter">
-          <option value="">LIVE + COMING_SOON (default)</option>
+          <option value="ALL" selected>ALL (default)</option>
           <option value="LIVE">LIVE only</option>
           <option value="COMING_SOON">COMING_SOON only</option>
           <option value="ENDED">ENDED only</option>
-          <option value="ALL">ALL (incl. ENDED)</option>
         </select>
       </label>
 
@@ -44,6 +52,19 @@
       const statusFilter = document.getElementById("statusFilter");
       const auctionsContainer = document.getElementById("auctionsContainer");
       const pollStatus = document.getElementById("pollStatus");
+      const buyerDashboardLink = document.getElementById("buyerDashboardLink");
+
+      // --- Helper: Update Dashboard Link Visibility ---
+      function updateDashboardLink() {
+        const buyerId = buyerSelect.value || "";
+        if (buyerId) {
+          buyerDashboardLink.href = `/buyer/${buyerId}/`;
+          buyerDashboardLink.style.display = "inline";
+        } else {
+          buyerDashboardLink.href = "#";
+          buyerDashboardLink.style.display = "none";
+        }
+      }
 
       function fmtTime(seconds) {
         const s = Math.max(0, Number(seconds || 0));
@@ -76,6 +97,8 @@
         let html = "";
         for (const a of auctions) {
           const buyerId = buyerSelect.value || "";
+          
+          // Link construction for "Open" button
           const link = buyerId
             ? `/buyer/auction/${a.id}/?buyer_id=${buyerId}`
             : `/buyer/auction/${a.id}/`;
@@ -100,10 +123,8 @@
       async function pollOnce() {
         try {
           pollStatus.textContent = "Fetching...";
-          const filter = statusFilter.value;
+          const filter = statusFilter.value; // Now defaults to "ALL"
 
-          // Our backend supports ?status=LIVE/COMING_SOON/ENDED.
-          // Default view should show LIVE+COMING_SOON.
           let url = "/api/auctions/";
           const res = await fetch(url);
           const data = await res.json();
@@ -116,12 +137,11 @@
 
           let auctions = data.auctions || [];
 
-          if (filter === "") {
-            auctions = auctions.filter(a => a.status === "LIVE" || a.status === "COMING_SOON");
-          } else if (filter === "ALL") {
-            // no filter
+          // Client-side filtering
+          if (filter === "ALL") {
+             // Show everything
           } else {
-            auctions = auctions.filter(a => a.status === filter);
+             auctions = auctions.filter(a => a.status === filter);
           }
 
           renderAuctions(auctions);
@@ -131,11 +151,17 @@
         }
       }
 
+      // Initial Calls
       pollOnce();
+      updateDashboardLink(); // Ensure button state is correct on load
       setInterval(pollOnce, 2000);
 
-      // re-render link targets when buyer changes
-      buyerSelect.addEventListener("change", pollOnce);
+      // Event Listeners
+      buyerSelect.addEventListener("change", () => {
+        updateDashboardLink(); // Update button immediately
+        pollOnce();            // Refresh auction list (to update 'Open' links)
+      });
+      
       statusFilter.addEventListener("change", pollOnce);
     </script>
   </body>

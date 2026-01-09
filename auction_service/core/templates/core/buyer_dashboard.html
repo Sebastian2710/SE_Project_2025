@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SafeBid - Buyer dashboard</title>
+  </head>
+  <body>
+    <p><a href="/buyer/auctions/">← Browse auctions</a> &nbsp; | &nbsp; <a href="/hello/">Home</a></p>
+
+    <h1>Buyer dashboard</h1>
+
+    {% if error %}
+      <p style="color:red;">{{ error }}</p>
+    {% endif %}
+
+    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ccc;">
+      <div>
+        Buyer (demo): <strong>{{ buyer.username }}</strong> (id={{ buyer.id }})
+      </div>
+      <div style="margin-top:6px; color:#555;">
+        This page shows:
+        <ul>
+          <li>Auctions you have bid on (from the Auction Service DB)</li>
+          <li>
+            Recommendations (from a <strong>separate Recommendation Service</strong>
+            via <code>/recommend/{{ buyer.id }}/</code>)
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:16px; align-items:flex-start;">
+      <!-- Left: my bid listings -->
+      <div style="flex: 2; border:1px solid #ccc; padding:12px;">
+        <h2>My bid listings</h2>
+
+        {% if items|length == 0 %}
+          <p>You have not bid on any listings yet.</p>
+        {% else %}
+          {% for it in items %}
+            <div style="border:1px solid #ddd; padding:10px; margin:10px 0;">
+              <div><strong>#{{ it.id }} - {{ it.name }}</strong></div>
+              <div>Seller: {{ it.seller.username }}</div>
+              <div>Status: <strong>{{ it.status }}</strong></div>
+              <div>Current price: <strong>{{ it.current_price }}</strong></div>
+              <div>
+                Highest bidder:
+                {% if it.highest_bidder %}<strong>{{ it.highest_bidder.username }}</strong>{% else %}-{% endif %}
+              </div>
+              <div style="margin-top:6px;">
+                <a href="/buyer/auction/{{ it.id }}/?buyer_id={{ buyer.id }}">Open</a>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      <!-- Right: recommendations -->
+      <div style="flex: 1; border:1px solid #ccc; padding:12px;">
+        <h2>Recommended for me</h2>
+
+        <div style="font-size: 0.95em; color:#555; margin-bottom:10px;">
+          Source: <strong>Recommendation Service</strong> (RPyC) →
+          <strong>Auction Service</strong> (JSON)
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <button id="refreshRecsBtn">Refresh</button>
+          <span id="recsStatus" style="margin-left:10px; color:#555;"></span>
+        </div>
+
+        <div id="recsContainer" data-user-id="{{ buyer.id }}">Loading...</div>
+      </div>
+    </div>
+
+    <script>
+      const recsContainer = document.getElementById("recsContainer");
+      const recsStatus = document.getElementById("recsStatus");
+      const refreshBtn = document.getElementById("refreshRecsBtn");
+      const userId = recsContainer.dataset.userId;
+      
+      // item_id -> item_name (from Auction Service DB)
+      let itemNameById = {};
+
+      function escapeHtml(str) {
+        return String(str)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      async function loadItemNamesOnce() {
+        try {
+          const res = await fetch("/api/auctions/");
+          const data = await res.json();
+          if (!res.ok) return;
+
+          const auctions = data.auctions || [];
+          for (const a of auctions) {
+            itemNameById[a.id] = a.name;
+          }
+        } catch (e) {
+          // silent fail – recommendations still work with IDs only
+        }
+      }
+
+      function renderRecs(payload) {
+        const recs = payload?.recommendations || [];
+
+        if (!recs.length) {
+          recsContainer.innerHTML = "<p>No recommendations.</p>";
+          return;
+        }
+
+        let html = "<ol>";
+        for (const r of recs) {
+          const itemId = r.item_id;
+          const score = r.score;
+
+          const itemName = itemNameById[itemId] || `Item #${itemId}`;
+          const link = `/buyer/auction/${itemId}/?buyer_id=${userId}`;
+
+          html += `
+            <li style="margin-bottom:8px;">
+              <a href="${link}">
+                ${escapeHtml(itemName)} <span style="color:#777;">(#${itemId})</span>
+              </a>
+              <span style="color:#555;">(score: ${Number(score).toFixed(4)})</span>
+            </li>
+          `;
+        }
+        html += "</ol>";
+
+        html += `
+          <details style="margin-top:10px;">
+            <summary>Debug (raw JSON from /recommend/${userId}/)</summary>
+            <pre style="white-space:pre-wrap; border:1px solid #eee; padding:8px;">
+${escapeHtml(JSON.stringify(payload, null, 2))}
+            </pre>
+          </details>
+        `;
+
+        recsContainer.innerHTML = html;
+      }
+
+      async function fetchRecsOnce() {
+        try {
+          recsStatus.textContent = "Fetching...";
+          const res = await fetch(`/recommend/${userId}/?top_n=10`);
+          const data = await res.json();
+
+          if (!res.ok) {
+            recsContainer.innerHTML =
+              `<p style="color:red;">${escapeHtml(data.error || "Failed")}</p>`;
+            recsStatus.textContent = "Error";
+            return;
+          }
+
+          renderRecs(data);
+          recsStatus.textContent = "Updated " + new Date().toLocaleTimeString();
+        } catch (e) {
+          recsStatus.textContent = "Network error";
+          recsContainer.innerHTML =
+            `<p style="color:red;">Network error while calling /recommend/${userId}/</p>`;
+        }
+      }
+
+      refreshBtn.addEventListener("click", fetchRecsOnce);
+
+      // Load item names first, then recommendations
+      loadItemNamesOnce().then(fetchRecsOnce);
+
+      // Light polling (demo-friendly)
+      setInterval(fetchRecsOnce, 8000);
+    </script>
+  </body>
+</html>

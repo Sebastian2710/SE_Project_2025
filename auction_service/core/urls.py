@@ -10,6 +10,7 @@ from .views import (
     seller_dashboard,
     buyer_auctions,
     buyer_auction_detail,
+    buyer_dashboard,
     api_auctions,
     api_auction_state,
     api_seller_auctions,
@@ -32,6 +33,8 @@ urlpatterns = [
     # Buyer UI
     path("buyer/auctions/", buyer_auctions, name="buyer_auctions"),
     path("buyer/auction/<int:item_id>/", buyer_auction_detail, name="buyer_auction_detail"),
+    path("buyer/<int:user_id>/", buyer_dashboard, name="buyer_dashboard"),
+
 
     # Polling JSON endpoints
     path("api/auctions/", api_auctions, name="api_auctions"),

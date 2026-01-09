@@ -13,18 +13,34 @@ from datetime import timedelta
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.db import transaction
+from django.shortcuts import render, get_object_or_404
+from .models import Buyer, Bid, Item
+
 
 from .models import Seller  # add Seller import
 _BIDDING_MONITORS: Dict[str, AuctionBiddingMonitor] = {}
 
 
-def _get_monitor(session_id: str) -> AuctionBiddingMonitor:
-    # IMPORTANT: do NOT auto-reset when DONE if you want to demonstrate violations.
+def _get_monitor(session_id: str, strict: bool = False) -> AuctionBiddingMonitor:
+    """
+    Each bidding protocol run is single-use (ends in DONE).
+    For the UI demo, we want repeated bids to work by default, so we reset
+    the monitor automatically once it reaches DONE.
+
+    If strict=True, we do NOT reset on DONE (useful to demonstrate violations).
+    """
     monitor = _BIDDING_MONITORS.get(session_id)
     if monitor is None:
         monitor = AuctionBiddingMonitor()
         _BIDDING_MONITORS[session_id] = monitor
+        return monitor
+
+    if (not strict) and getattr(monitor, "state", None) == "DONE":
+        monitor = AuctionBiddingMonitor()
+        _BIDDING_MONITORS[session_id] = monitor
+
     return monitor
+
 
 
 def hello(request):
@@ -184,7 +200,6 @@ def buyer_auction_detail(request: HttpRequest, item_id: int):
         "core/buyer_auction_detail.html",
         {"buyers": buyers, "item_id": item.id},
     )
-
 
 # --- ADD JSON polling endpoints ---
 def api_auctions(request: HttpRequest):
@@ -365,7 +380,9 @@ def place_bid(request: HttpRequest):
     except Exception:
         return JsonResponse({"error": "Invalid types for buyer_id/item_id/amount"}, status=400)
 
-    monitor = _get_monitor(session_id)
+    strict = str(request.GET.get("strict", "0")) == "1"
+    monitor = _get_monitor(session_id, strict=strict)
+
 
     try:
         # Buyer -> Auction: Bid()
@@ -483,7 +500,9 @@ def decide_bid(request: HttpRequest, bid_id: int):
     if decision not in ("confirm", "reject"):
         return JsonResponse({"error": "decision must be 'confirm' or 'reject'"}, status=400)
 
-    monitor = _get_monitor(session_id)
+    strict = str(request.GET.get("strict", "0")) == "1"
+    monitor = _get_monitor(session_id, strict=strict)
+
 
     try:
         bid = Bid.objects.select_related("buyer", "item", "item__seller").get(id=int(bid_id))
@@ -553,3 +572,42 @@ def decide_bid(request: HttpRequest, bid_id: int):
             {"error": "Protocol violation", "details": str(ex), "session_id": session_id},
             status=409,
         )
+
+def buyer_dashboard(request: HttpRequest, user_id: int):
+    """
+    Buyer Dashboard (demo mode)
+    - URL: /buyer/<user_id>/
+    - Shows auctions this buyer has bid on
+    - Fetches recommendations from the separate service
+    """
+    # Get buyer or 404
+    buyer = get_object_or_404(Buyer, id=user_id)
+
+    # Auctions this buyer has bid on
+    items = (
+        Item.objects.select_related("seller", "highest_bidder")
+        .filter(bid__buyer=buyer)
+        .distinct()
+        .order_by("-id")
+    )
+
+    # Recommendations from Raisa's service
+    try:
+        recommendations = recommender_client.get_recommendations_for_user(user_id=buyer.id, top_n=5)
+        print("Recommender output for buyer", buyer.id, ":", recommendations)
+
+        recommended_items = Item.objects.filter(id__in=[r["item_id"] for r in recommendations])
+    except Exception:
+        recommended_items = []
+
+    # Render template
+    return render(
+        request,
+        "core/buyer_dashboard.html",
+        {
+            "buyer": buyer,
+            "items": items,
+            "recommended_items": recommended_items,
+            "user_id": buyer.id,  # for JS calls
+        },
+    )
