@@ -121,6 +121,19 @@ class RecommendationClient:
             monitor.recv_rec_error()
             raise
 
+    def load_interactions(self, interactions: List[Dict[str, Any]]) -> bool:
+        """
+        Public API for apps.py signals to push specific interactions.
+        """
+        if not interactions:
+            return True
+        try:
+            # We call the RPyC method exposed in server.py
+            return bool(self._call("load_interactions", interactions))
+        except Exception as e:
+            logger.error(f"Failed to push interactions: {e}")
+            return False
+        
     def get_similar_items(
         self, item_id: int, top_n: int = 10
     ) -> List[Dict[str, Any]]:
