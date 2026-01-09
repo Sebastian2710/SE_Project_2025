@@ -3,7 +3,7 @@ import logging
 import rpyc
 from django.conf import settings
 
-from core.models import Bid
+from core.models import Bid,Item
 from .protocol_checker import AuctionRecommenderMonitor
 
 logger = logging.getLogger(__name__)
@@ -53,16 +53,36 @@ class RecommendationClient:
     # ------------------------------------------------------------------
 
     def build_interactions_from_db(self) -> List[Dict[str, Any]]:
+        """
+        Fetches all real bids + injects 'Ghost' interactions for ACTIVE items.
+        """
         interactions: List[Dict[str, Any]] = []
-        # Optimization: Filter out bids with no amount
-        qs = Bid.objects.select_related("buyer", "item").filter(amount__isnull=False)
 
+        # 1. Real Bids
+        qs = Bid.objects.select_related("buyer", "item").filter(amount__isnull=False)
         for bid in qs:
             interactions.append({
                 "user_id": bid.buyer_id,
                 "item_id": bid.item_id,
                 "rating": float(bid.amount),
             })
+
+        # 2. Ghost User Injection
+        # FIX: Include "COMING_SOON" so new items are recommended before they go live.
+        active_items = Item.objects.filter(status__in=["LIVE", "COMING_SOON"])
+        
+        ghost_count = 0
+        for item in active_items:
+            interactions.append({
+                "user_id": 0,          # The "Ghost" User
+                "item_id": item.id,
+                "rating": 1.0          # Minimal positive interaction
+            })
+            ghost_count += 1
+
+        # DEBUG: Print to console to prove it's working
+        print(f"[Recommender Client] Interactions built: {len(qs)} real bids + {ghost_count} ghost entries.")
+
         return interactions
 
     def push_interactions_to_recommender(self) -> None:

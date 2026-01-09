@@ -386,7 +386,7 @@ def place_bid(request: HttpRequest):
 
     try:
         # Buyer -> Auction: Bid()
-        monitor.recv_bid_from_buyer()
+        monitor.recv_bid_from_buyer() #comment to show protocol violation
 
         # Record bid (status depends on auction state)
         if item.status == Item.Status.COMING_SOON:
